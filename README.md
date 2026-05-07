@@ -34,6 +34,203 @@ An AI-powered real-time sales coaching platform that provides live meeting assis
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Architecture Diagram (Mermaid)
+
+```mermaid
+graph TB
+    subgraph Auth["Authentication Layer"]
+        SI[Sign In Screen] --> AK[API Key Setup]
+        AK --> SET[Settings Screen]
+    end
+
+    subgraph Dashboard["Dashboard"]
+        DH[Dashboard Header<br/>Nav · Search · Calendar Sync · User Menu]
+        ST[Stat Tiles<br/>Meetings · Confidence · Hints · Signals]
+        HT[Meeting History Table<br/>Sortable: Date · Client · Score<br/>Filterable: Stage · Scope]
+        SB[Sidebar<br/>Top Clients · Coach Insights · Team]
+    end
+
+    subgraph LiveMeeting["Live Meeting"]
+        AH[App Header<br/>Status Bar · Controls]
+        CR[Context Rail<br/>Client Info · Deal Stage]
+        TP[Transcript Panel<br/>Real-time · Notes]
+        CC[Coach Column<br/>AI Hints · Sentiment]
+    end
+
+    subgraph Summary["Meeting Summary"]
+        IS[Internal Summary<br/>Score · Insights · Actions<br/>Upsell · Risks]
+        CE[Client Email<br/>Tone · References<br/>Attachments]
+        FT[Full Transcript<br/>Search · Multilingual]
+        SM[Share Modal<br/>People Picker · Permissions]
+    end
+
+    subgraph External["External Integrations"]
+        GCAL[Google Calendar<br/>MCP Server]
+        OAUTH[Google OAuth 2.0]
+    end
+
+    SI --> AK --> Dashboard
+    DH --> HT
+    HT -->|"Click meeting"| Summary
+    Dashboard -->|"New meeting"| PM[Pre-Meeting Setup]
+    PM --> LiveMeeting
+    LiveMeeting -->|"End call"| Summary
+    Summary -->|"Back"| Dashboard
+    OAUTH --> GCAL -->|"list_events"| HT
+
+    style Auth fill:#FEF3E2,stroke:#F9AB00,color:#333
+    style Dashboard fill:#E8F0FE,stroke:#1A73E8,color:#333
+    style LiveMeeting fill:#FCE8E6,stroke:#EA4335,color:#333
+    style Summary fill:#E6F4EA,stroke:#34A853,color:#333
+    style External fill:#F3E8FD,stroke:#9B59B6,color:#333
+```
+
+## Screen Flow (Mermaid)
+
+```mermaid
+stateDiagram-v2
+    [*] --> SignIn
+    SignIn --> ApiKeySetup: Authenticated
+    ApiKeySetup --> Dashboard: Key saved
+
+    Dashboard --> PreMeeting: New meeting
+    Dashboard --> Summary: Click history row
+
+    PreMeeting --> LiveMeeting: Start
+    PreMeeting --> Dashboard: Cancel
+
+    LiveMeeting --> Summary: End call
+
+    Summary --> Dashboard: Back
+
+    state Dashboard {
+        [*] --> MyMeetings
+        MyMeetings --> SharedWithMe: Tab switch
+        SharedWithMe --> MyMeetings: Tab switch
+    }
+
+    state Summary {
+        [*] --> InternalSummary
+        InternalSummary --> ClientEmail: Tab
+        ClientEmail --> FullTranscript: Tab
+        FullTranscript --> InternalSummary: Tab
+    }
+
+    state LiveMeeting {
+        Listening --> Paused: Pause
+        Paused --> Listening: Resume
+        Listening --> Muted: Mute
+        Muted --> Listening: Unmute
+    }
+```
+
+## Component Tree (Mermaid)
+
+```mermaid
+graph TD
+    CSP["CalendarSyncProvider<br/><i>Context: calendar MCP state</i>"]
+    APP["App<br/><i>Auth + routing</i>"]
+
+    CSP --> APP
+
+    APP --> SIS["SignInScreen"]
+    APP --> AKS["ApiKeySetup"]
+    APP --> SETS["SettingsScreen"]
+    APP --> DASH["Dashboard"]
+    APP --> PMT["PreMeeting"]
+    APP --> LM["Live Meeting"]
+    APP --> SUM["SummaryScreen"]
+
+    DASH --> DHD["DashHeader"]
+    DHD --> CSB["CalendarSyncBtn"]
+    DASH --> STAT["StatTiles"]
+    DASH --> HIST["Meeting History Table"]
+    HIST --> HSB["HistShareBtn"]
+    DASH --> SIDE["Sidebar"]
+
+    LM --> APH["AppHeader"]
+    LM --> CTX["ContextRail"]
+    LM --> TRP["TranscriptPanel"]
+    LM --> COA["CoachColumn"]
+
+    SUM --> INT["InternalSummary"]
+    SUM --> CLE["ClientEmail"]
+    CLE --> REF["ReferenceLinks"]
+    SUM --> FTR["FullTranscript"]
+    SUM --> SHM["ShareModal"]
+
+    style CSP fill:#F3E8FD,stroke:#9B59B6
+    style DASH fill:#E8F0FE,stroke:#1A73E8
+    style LM fill:#FCE8E6,stroke:#EA4335
+    style SUM fill:#E6F4EA,stroke:#34A853
+    style CSB fill:#F3E8FD,stroke:#9B59B6
+```
+
+## Google Calendar MCP Integration (Mermaid)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as Sally App
+    participant MCP as MCP Server<br/>calendarmcp.googleapis.com
+    participant GC as Google Calendar API
+
+    Note over U,GC: Authentication Flow
+    U->>S: Click "Connect Calendar"
+    S->>U: Redirect to Google OAuth
+    U->>S: Grant calendar.readonly scope
+    S->>S: Store OAuth tokens
+
+    Note over U,GC: Sync Flow
+    S->>MCP: list_events(calendar_id, time_min, time_max)
+    MCP->>GC: GET /calendars/{id}/events
+    GC-->>MCP: Event list (JSON)
+    MCP-->>S: Structured events
+    S->>S: Merge into Meeting History
+
+    Note over U,GC: Available MCP Tools
+    rect rgb(232, 240, 254)
+        S->>MCP: list_events — Fetch events by date range
+        S->>MCP: get_event — Get single event details
+        S->>MCP: list_calendars — List available calendars
+        S->>MCP: create_event — Schedule new meetings
+        S->>MCP: suggest_time — Free/busy lookup
+    end
+```
+
+## Data Flow (Mermaid)
+
+```mermaid
+flowchart LR
+    subgraph Data["Data Layer"]
+        H["HISTORY[]<br/><i>id, client, title, date,<br/>participants, score, tags</i>"]
+        S["SUMMARIES{}<br/><i>Map by meeting ID<br/>meeting, internal,<br/>client, references</i>"]
+        T["TEAM[]<br/><i>name, role, initials,<br/>color, email</i>"]
+    end
+
+    subgraph UI["UI Layer"]
+        DB["Dashboard<br/>filter + sort"]
+        SM["Summary Screen"]
+        SH["Share Modal"]
+    end
+
+    subgraph Calendar["Calendar MCP"]
+        GC["Google Calendar<br/>Events"]
+    end
+
+    H --> DB
+    DB -->|"onOpenMeeting(id)"| SM
+    S -->|"SUMMARIES[id]"| SM
+    T --> SH
+    GC -->|"list_events"| H
+
+    style Data fill:#FEF3E2,stroke:#F9AB00,color:#333
+    style UI fill:#E8F0FE,stroke:#1A73E8,color:#333
+    style Calendar fill:#F3E8FD,stroke:#9B59B6,color:#333
+```
+
+---
+
 ## Screen Flow
 
 ```
